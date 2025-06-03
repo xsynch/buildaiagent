@@ -1,4 +1,3 @@
-from genericpath import isdir
 import os
 
 
@@ -18,4 +17,23 @@ def get_files_info(working_directory, directory=None):
             result += f"- {file}: file_size=0 bytes, is_dir=True\n"
         
     return result 
-    
+
+def get_file_content(working_directory, file_path):
+    results = ""
+    if file_path.startswith("..") or file_path.startswith("/"):
+        return f'Error: Cannot read "{file_path}" as it is outside the permitted working directory'
+    if not os.path.isfile((os.path.join(working_directory,file_path))):
+        return f'Error: File not found or is not a regular file: "{file_path}"'
+    with open(os.path.join(working_directory,file_path)) as f:
+        
+        character_count = 0
+        for line in f:
+            for character in line:
+                if character_count >= 10000:
+                    results += f'[...File "{file_path}" truncated at 10000 characters]'
+                    return results 
+                results += character
+                character_count += 1
+            
+    return results
+        
