@@ -1,6 +1,10 @@
 import os, sys
 from dotenv import load_dotenv
 from google import genai
+from functions import get_files_info
+from functions.run_python import run_python_file
+from functions.write_files import overwrite_file
+from schemas import *
 
 SYSTEM_PROMPT = """
 You are a helpful AI coding agent.
@@ -8,6 +12,9 @@ You are a helpful AI coding agent.
 When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
 
 - List files and directories
+- Read file contents
+- Execute Python files with optional arguments
+- Write or overwrite files
 
 All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
 """
@@ -28,12 +35,49 @@ schema_get_files_info = genai.types.FunctionDeclaration(
 
 available_functions = genai.types.Tool(
     function_declarations=[
-        schema_get_files_info,
+        schema_get_files_info, schema_get_file_content, schema_run_python_file, schema_write_file
     ]
 )
 
+def call_function(function_call_part:types.FunctionCall, verbose=False):
+    result = ""
+    function_call_part.args.update({"working_directory":"./calculator"})
+    
+    if verbose:
+        print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+    else:
+        print(f" - Calling function: {function_call_part.name}")
+    if function_call_part.name == "get_files_info":
+        result = get_files_info.get_files_info(**function_call_part.args)
+    elif function_call_part.name == "get_file_content":
+        result = get_files_info.get_file_content(**function_call_part.args)
+    elif function_call_part.name == "run_python_file":
+        result = run_python_file(**function_call_part.args)
+    elif function_call_part.name == "overwrite_file":
+        result = overwrite_file(**function_call_part.args)
+    else:
+        return types.Content(
+    role="tool",
+    parts=[
+        types.Part.from_function_response(
+            name=function_call_part.name,
+            response={"error": f"Unknown function: {function_call_part.name}"},
+        )
+    ],
+    )
+    return types.Content(
+        role="tool",
+        parts=[
+        types.Part.from_function_response(
+            name=function_call_part.name,
+            response={"result": result},
+        )
+    ],
+    ) 
+
 def main(userInputs: list[str]):
     prompt = userInputs[1]
+    verbose = False
     # prompt = SYSTEM_PROMPT
     messages = [
         genai.types.Content(role="user", parts=[genai.types.Part(text=prompt)]),
@@ -54,12 +98,20 @@ def main(userInputs: list[str]):
         model='gemini-2.0-flash-001',contents=messages,config=config
     )
     if(userInputs[len(userInputs)-1]) == "--verbose":
+        verbose = True
+    if response.function_calls:
+        fc = response.function_calls
+        # print(f"what is in fc: {fc}")
+        # print(f"Calling function: {fc[0].name}({fc[0].args})")
+        function_call_response = call_function(fc[0],verbose)
+        if not function_call_response.parts[0].function_response.response:
+            print("Error from function call response")
+    if(userInputs[len(userInputs)-1]) == "--verbose":
         print(f"Working on: {prompt}")
         print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
         print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
-    if response.function_calls:
-        fc = response.function_calls
-        print(f"Calling function: {fc[0].name}({fc[0].args})")
+        print(f"-> {function_call_response.parts[0].function_response.response}")
+
     # print(response.text)
 
 
