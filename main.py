@@ -78,6 +78,8 @@ def call_function(function_call_part:types.FunctionCall, verbose=False):
 def main(userInputs: list[str]):
     prompt = userInputs[1]
     verbose = False
+    
+    
     # prompt = SYSTEM_PROMPT
     messages = [
         genai.types.Content(role="user", parts=[genai.types.Part(text=prompt)]),
@@ -93,24 +95,28 @@ def main(userInputs: list[str]):
     tools=[available_functions], system_instruction=SYSTEM_PROMPT
     )
 
-    response = client.models.generate_content(
-        
-        model='gemini-2.0-flash-001',contents=messages,config=config
-    )
-    if(userInputs[len(userInputs)-1]) == "--verbose":
-        verbose = True
-    if response.function_calls:
-        fc = response.function_calls
-        # print(f"what is in fc: {fc}")
-        # print(f"Calling function: {fc[0].name}({fc[0].args})")
-        function_call_response = call_function(fc[0],verbose)
-        if not function_call_response.parts[0].function_response.response:
-            print("Error from function call response")
-    if(userInputs[len(userInputs)-1]) == "--verbose":
-        print(f"Working on: {prompt}")
-        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-        print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
-        print(f"-> {function_call_response.parts[0].function_response.response}")
+    for i in range(20):        
+        response = client.models.generate_content(        
+            model='gemini-2.0-flash-001',contents=messages,config=config
+        )
+        for j in range(len(response.candidates)):
+            messages.append(response.candidates[j].content)
+        if(userInputs[len(userInputs)-1]) == "--verbose":
+            verbose = True
+        if response.function_calls:
+            fc = response.function_calls            
+            function_call_response = call_function(fc[0],verbose)
+            if not function_call_response.parts[0].function_response.response:
+                print("Error from function call response")
+            messages.append(function_call_response)
+        else: 
+            print(response.text)
+            break
+        if(userInputs[len(userInputs)-1]) == "--verbose":
+            print(f"Working on: {prompt}")
+            print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+            print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+            print(f"-> {function_call_response.parts[0].function_response.response}")
 
     # print(response.text)
 
